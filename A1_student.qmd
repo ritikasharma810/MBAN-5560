@@ -1,0 +1,333 @@
+---
+title: "Assignment 1 - Basics of Hyperparameter Tuning: Finding the Optimal Span & Degree for LOESS"
+subtitle: "MBAN 5560 - Due January 31, 2026 (Saturday) 11:59pm"
+author: "Dr. Aydede"
+date: today
+format: 
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 2
+    theme: cosmo
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+  
+In this assignment, you will apply the self-learning methods (cross-validation and bootstrapping) covered in class (January 27) to tune the `span` and `degree` hyperparameters for LOESS regression. Your goal is to find the optimal span that minimizes prediction error and to quantify the uncertainty in your results.
+
+**Key Learning Objectives:**
+
+1. Implement grid search for hyperparameter tuning
+2. Compare simple train-test split vs k-fold CV vs bootstrap CV
+3. Report prediction error with uncertainty (mean and SD)
+4. Benchmark tuned LOESS against simpler models
+
+**Important Notes:**
+
+- You can team up with **two classmates** for this assignment (maximum 3 students per team). Submit one assignment per team.
+- Use R and Quarto for your analysis. Submit the rendered HTML file along with the QMD source file.
+- Make sure your code runs without errors and produces the expected outputs.
+- Provide interpretations and explanations for your results, not just code outputs.
+- Using LLM assistance is allowed, but you must disclose which tool you used and how it helped.
+
+---
+
+# Setup
+
+Load the required libraries:
+
+```{r setup}
+# Load required libraries
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+```
+
+---
+
+# Part A: Data Setup and Exploration (15 points)
+
+## A.1 Simulated Data
+
+We will use simulated data where the true relationship is known but complex:
+
+$$f(x) = 50 + 15x - 0.3x^2 + 30\sin(x/3) + 10\cos(x)$$
+
+This combines a quadratic trend with multiple periodic components, making it challenging to predict.
+
+```{r simulate-data}
+# Generate simulated data
+set.seed(5560)
+n <- 500
+x <- sort(runif(n, min = 0, max = 30))
+f_true <- 50 + 15*x - 0.3*x^2 + 30*sin(x/3) + 10*cos(x)
+y <- f_true + rnorm(n, mean = 0, sd = 15)
+data <- data.frame(y = y, x = x, f_true = f_true)
+```
+
+## Task A.1: Visualize the data
+
+Create a scatter plot of the data with the true function overlaid as a red dashed line.
+
+```{r plot-data}
+# YOUR CODE HERE: Create scatter plot with true function
+
+
+```
+
+#### **Question 1 (3 points):** Describe the pattern you see in the data. What makes this relationship challenging for a simple linear model?
+
+**Your Answer:**
+
+---
+
+## Task A.2: Explore different span values
+
+Fit LOESS models with three different span values (0.2, 0.5, 0.8) using `degree = 1`. Plot all three fits on the same graph along with the true function.
+
+```{r explore-spans}
+# YOUR CODE HERE: Fit LOESS with span = 0.2, 0.5, 0.8 and plot
+
+
+```
+
+#### **Question 2 (4 points):** How does the span parameter affect the fitted curve? Which span appears to best capture the true relationship?
+
+**Your Answer:**
+
+#### **Question 3 (4 points):** Explain the bias-variance tradeoff in the context of the span parameter. Which span has high bias? Which has high variance?
+
+**Your Answer:**
+
+#### **Question 4 (4 points):** Can you determine the optimal span just by looking at these plots? Why or why not?
+
+**Your Answer:**
+
+---
+
+# Part B: Simple Train-Test Split (20 points)
+
+## Task B.1: Single train-test split
+
+Implement a grid search to find the optimal span using a single 80/20 train-test split.
+
+**Requirements:**
+- Use `degree = 1` (fixed)
+- Search span values from 0.1 to 0.9 by 0.05
+- Calculate RMSPE on the test set for each span value
+- Report the optimal span and its RMSPE
+
+```{r single-split}
+# Create hyperparameter grid
+grid_span <- seq(from = 0.1, to = 0.9, by = 0.05)
+
+# YOUR CODE HERE: Implement single train-test split grid search
+# 1. Set seed to 100
+# 2. Split data 80/20
+# 3. For each span, fit LOESS and calculate RMSPE
+# 4. Find optimal span
+
+
+```
+
+#### **Question 5 (5 points):** What is the optimal span found with seed = 100? What is the corresponding RMSPE?
+
+**Your Answer:**
+
+---
+
+## Task B.2: Demonstrate instability
+
+Repeat the grid search with three different seeds (200, 300, 400) to show how the optimal span varies.
+
+```{r instability-demo}
+# YOUR CODE HERE: Run grid search with seeds 200, 300, 400
+# Store the optimal span and RMSPE for each
+
+
+```
+
+#### **Question 6 (5 points):** Report the optimal span found with each seed. How much does it vary?
+
+**Your Answer:**
+
+#### **Question 7 (5 points):** Why does the optimal span change with different random splits? What does this tell us about using a single train-test split for hyperparameter tuning?
+
+**Your Answer:**
+
+#### **Question 8 (5 points):** Based on this exercise, would you trust the optimal span from a single split? What approach would be more reliable?
+
+**Your Answer:**
+
+---
+
+# Part C: 10-Fold Cross-Validation (25 points)
+
+## Task C.1: Implement nested CV
+
+Implement proper nested cross-validation with the **correct loop structure**:
+
+- **Outer loop:** 10 iterations with random 80/20 splits creating `modata` (model data) and `test` set
+- **Inner structure:** For EACH hyperparameter, calculate mean RMSPE across k folds, then select
+- Use `degree = 1`
+- Report the selected span and test RMSPE for each outer iteration
+
+**IMPORTANT: Loop Order Matters!**
+
+The hyperparameter loop must be **OUTSIDE** and the CV folds loop must be **INSIDE**:
+
+```
+for each hyperparameter setting:     # OUTER - loop over grid
+    for each fold i in 1:k:          # INNER - loop over CV folds
+        train on k-1 folds, validate on fold i
+    average RMSPE across all k folds for THIS hyperparameter
+select hyperparameter with lowest average RMSPE
+```
+
+This ensures we average errors FIRST, then select - NOT select per-fold then average selections!
+
+```{r nested-cv}
+# YOUR CODE HERE: Implement nested 10-fold CV
+
+```
+
+#### **Question 9 (5 points):** Create a table showing the selected span and test RMSPE for each of the 10 outer iterations.
+
+**Your Answer:**
+
+#### **Question 10 (5 points):** What is the mean and standard deviation of the test RMSPE across the 10 outer iterations?
+
+**Your Answer:**
+
+#### **Question 11 (5 points):** Is the selected span consistent across iterations? What span would you recommend?
+
+**Your Answer:**
+
+---
+
+## Task C.2: Extend to tuning both span AND degree
+
+Now tune both `span` and `degree` (1 or 2) using the same nested CV structure.
+
+```{r nested-cv-both}
+# Create grid with both span and degree
+grid_both <- expand.grid(
+  span = seq(from = 0.1, to = 0.9, by = 0.1),
+  degree = c(1, 2)
+)
+
+# YOUR CODE HERE: Implement nested CV tuning both span and degree
+
+
+```
+
+#### **Question 12 (5 points):** What combination of span and degree gives the best results? Does tuning degree in addition to span improve prediction?
+
+**Your Answer:**
+
+#### **Question 13 (5 points):** Compare the mean RMSPE from tuning only span (degree=1) vs tuning both. Is the improvement meaningful?
+
+**Your Answer:**
+
+---
+
+# Part D: Bootstrap Cross-Validation (25 points)
+
+## Task D.1: Implement Bootstrap CV
+
+Implement bootstrap cross-validation with OOB validation using the **correct loop structure**:
+
+- **Outer loop:** 8 iterations with random 80/20 splits creating `modata` (model data) and `test` set
+- **Inner structure:** For EACH hyperparameter, run B bootstrap iterations and average RMSPE, then select
+- Use the same grid as Part C (both span and degree)
+- Report results for each outer iteration
+
+**IMPORTANT: Loop Order Matters!**
+
+Same principle as k-fold CV - hyperparameter loop **OUTSIDE**, bootstrap loop **INSIDE**:
+
+```
+for each hyperparameter setting:     # OUTER - loop over grid
+    for j in 1:B:                    # INNER - loop over bootstrap iterations
+        sample with replacement → train set
+        OOB observations → validation set
+        calculate RMSPE
+    average RMSPE across all B iterations for THIS hyperparameter
+select hyperparameter with lowest average RMSPE
+```
+
+```{r bootstrap-cv}
+# YOUR CODE HERE: Implement bootstrap CV
+
+```
+
+#### **Question 14 (5 points):** Report the mean and SD of test RMSPE from bootstrap CV.
+
+**Your Answer:**
+
+#### **Question 15 (5 points):** Compare the bootstrap CV results to the k-fold CV results from Part C. Which method gave more stable results (lower SD)?
+
+**Your Answer:**
+
+#### **Question 16 (5 points):** The OOB validation set is approximately what percentage of the data? How does this compare to 10-fold CV where each validation fold is 10% of the data?
+
+**Your Answer:**
+
+#### **Question 17 (5 points):** Based on your results, which method would you recommend for hyperparameter tuning: k-fold CV or bootstrap CV? Justify your choice.
+
+**Your Answer:**
+
+#### **Question 18 (5 points):** Did bootstrap CV select different hyperparameters than k-fold CV? Explain any differences.
+
+**Your Answer:**
+
+---
+
+# Part E: Benchmark Comparison (15 points)
+
+## Task E.1: Fit benchmark models
+
+Using the same nested CV structure (10 outer iterations), evaluate these benchmark models:
+1. **Linear regression** (no tuning needed)
+2. **Polynomial regression (degree 4)** (no tuning needed)
+3. **LOESS with default span (0.75) and degree 1** (no tuning needed)
+
+Compare with your **tuned LOESS** results from Part C.
+
+```{r benchmarks}
+# YOUR CODE HERE: Evaluate benchmark models using same 10 outer iterations
+# For each model, calculate mean and SD of test RMSPE
+
+
+```
+
+#### **Question 19 (5 points):** Create a summary table comparing all methods with columns: Model, Mean RMSPE, SD RMSPE
+
+**Your Answer:**
+
+#### **Question 20 (5 points):** How much did hyperparameter tuning improve RMSPE compared to using the default span (0.75)?
+
+**Your Answer:**
+
+#### **Question 21 (5 points):** Based on your benchmark comparison, which model would you recommend for this data? Consider both accuracy (mean RMSPE) and reliability (SD). Is the improvement from tuning worth the computational cost?
+
+**Your Answer:**
+
+---
+
+# Submission Checklist
+
+- [ ] All code chunks completed and running without errors
+- [ ] All 21 questions answered with complete explanations
+- [ ] Summary tables created for each part
+- [ ] Clear interpretations connecting results to self-learning concepts
+- [ ] Team members listed in author field
+- [ ] LLM usage disclosed (if applicable)
+- [ ] Document renders to HTML successfully
+
+---
+
+**Good luck with your analysis!**
