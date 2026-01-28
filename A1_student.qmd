@@ -320,20 +320,119 @@ This ensures we average errors FIRST, then select - NOT select per-fold then ave
 
 ```{r nested-cv}
 # YOUR CODE HERE: Implement nested 10-fold CV
+# Nested Cross-Validation
+set.seed(5560)
+n_outer <- 10
+k_folds <- 10
+
+# Storage for results
+outer_results <- data.frame(
+  iteration = 1:n_outer, 
+  selected_span = NA, 
+  test_rmspe = NA
+)
+
+# Outer loop: 10 iterations with different train/test splits
+for(outer_iter in 1:n_outer) {
+  
+  # Create outer split (80/20)
+  test_idx <- sample(1:nrow(data), size = 0.2 * nrow(data))
+  modata <- data[-test_idx, ]  # Model data (80%)
+  test_data <- data[test_idx, ]  # Test data (20%)
+  
+  # For each span, calculate average RMSPE across k folds
+  grid_rmspe <- rep(NA, length(grid_span))
+  
+  # OUTER LOOP: Try each span value
+  for(g in 1:length(grid_span)) {
+    
+    # INNER LOOP: K-fold CV for this span
+    fold_rmspe <- rep(NA, k_folds)
+    fold_idx <- sample(rep(1:k_folds, length.out = nrow(modata)))
+    
+    for(fold in 1:k_folds) {
+      # Split modata into train and validation
+      val_data <- modata[fold_idx == fold, ]
+      train_data <- modata[fold_idx != fold, ]
+      
+      # Fit model
+      fit <- loess(y ~ x, data = train_data, span = grid_span[g], degree = 1)
+      
+      # Predict on validation fold
+      pred <- predict(fit, newdata = val_data)
+      
+      # Calculate RMSPE for this fold
+      if(!any(is.na(pred))) {
+        fold_rmspe[fold] <- sqrt(mean((val_data$y - pred)^2))
+      }
+    }
+    
+    # Average RMSPE across all folds for THIS span
+    grid_rmspe[g] <- mean(fold_rmspe, na.rm = TRUE)
+  }
+  
+  # Select span with lowest average RMSPE
+  best_span <- grid_span[which.min(grid_rmspe)]
+  
+  # Refit on all modata and test on held-out test set
+  final_fit <- loess(y ~ x, data = modata, span = best_span, degree = 1)
+  final_pred <- predict(final_fit, newdata = test_data)
+  
+  # Store results
+  outer_results$selected_span[outer_iter] <- best_span
+  if(!any(is.na(final_pred))) {
+    outer_results$test_rmspe[outer_iter] <- sqrt(mean((test_data$y - final_pred)^2))
+  }
+  
+  cat("Iteration", outer_iter, "complete - Selected span:", best_span, "\n")
+}
+
+# Summary statistics
+cat("\n=== RESULTS ===\n")
+print(outer_results)
+cat("\nMean Test RMSPE:", round(mean(outer_results$test_rmspe, na.rm = TRUE), 2), "\n")
+cat("SD Test RMSPE:", round(sd(outer_results$test_rmspe, na.rm = TRUE), 2), "\n")
+cat("Most common span:", names(sort(table(outer_results$selected_span), decreasing = TRUE))[1], "\n")
 
 ```
 
 #### **Question 9 (5 points):** Create a table showing the selected span and test RMSPE for each of the 10 outer iterations.
 
 **Your Answer:**
+Here is the table of results from 10-fold nested cross-validation:
+
+| Iteration | Selected Span | Test RMSPE |
+|-----------|---------------|------------|
+| 1         | 0.25          | 15.40      |
+| 2         | 0.15          | 14.54      |
+| 3         | 0.10          | NA         |
+| 4         | 0.15          | NA         |
+| 5         | 0.15          | 16.00      |
+| 6         | 0.15          | 17.44      |
+| 7         | 0.10          | NA         |
+| 8         | 0.10          | NA         |
+| 9         | 0.15          | 16.23      |
+| 10        | 0.10          | 17.18      |
+
+Note: Some iterations have NA for test RMSPE due to prediction failures on the test set.
 
 #### **Question 10 (5 points):** What is the mean and standard deviation of the test RMSPE across the 10 outer iterations?
 
 **Your Answer:**
+Mean Test RMSPE: 16.13
+SD Test RMSPE: 1.09
+
+This shows that on average, our tuned LOESS model has a prediction error of about 16.13 units, with relatively low variability (SD = 1.09) across different test sets.
 
 #### **Question 11 (5 points):** Is the selected span consistent across iterations? What span would you recommend?
 
 **Your Answer:**
+The selected span is fairly consistent. Out of 10 iterations:
+- Span 0.15 was selected 5 times (most common)
+- Span 0.10 was selected 4 times
+- Span 0.25 was selected 1 time
+
+I would recommend span = 0.15 because it was selected most frequently and represents a good balance between the very flexible 0.10 and the smoother 0.25. The consistency across iterations (most values between 0.10-0.15) gives us much more confidence than the unstable results from single train-test splits in Part B.
 
 ---
 
@@ -349,18 +448,86 @@ grid_both <- expand.grid(
 )
 
 # YOUR CODE HERE: Implement nested CV tuning both span and degree
+# Nested CV tuning both span and degree
+set.seed(5560)
 
+outer_results_both <- data.frame(
+  iteration = 1:n_outer,
+  selected_span = NA,
+  selected_degree = NA,
+  test_rmspe = NA
+)
+
+for(outer_iter in 1:n_outer) {
+  
+  # Outer split
+  test_idx <- sample(1:nrow(data), size = 0.2 * nrow(data))
+  modata <- data[-test_idx, ]
+  test_data <- data[test_idx, ]
+  
+  # For each hyperparameter combo, calculate average RMSPE
+  grid_rmspe <- rep(NA, nrow(grid_both))
+  
+  for(g in 1:nrow(grid_both)) {
+    
+    # K-fold CV for this combo
+    fold_rmspe <- rep(NA, k_folds)
+    fold_idx <- sample(rep(1:k_folds, length.out = nrow(modata)))
+    
+    for(fold in 1:k_folds) {
+      val_data <- modata[fold_idx == fold, ]
+      train_data <- modata[fold_idx != fold, ]
+      
+      fit <- loess(y ~ x, data = train_data, 
+                   span = grid_both$span[g], 
+                   degree = grid_both$degree[g])
+      pred <- predict(fit, newdata = val_data)
+      
+      if(!any(is.na(pred))) {
+        fold_rmspe[fold] <- sqrt(mean((val_data$y - pred)^2))
+      }
+    }
+    
+    grid_rmspe[g] <- mean(fold_rmspe, na.rm = TRUE)
+  }
+  
+  # Select best combo
+  best_idx <- which.min(grid_rmspe)
+  best_span <- grid_both$span[best_idx]
+  best_degree <- grid_both$degree[best_idx]
+  
+  # Test on held-out set
+  final_fit <- loess(y ~ x, data = modata, span = best_span, degree = best_degree)
+  final_pred <- predict(final_fit, newdata = test_data)
+  
+  outer_results_both$selected_span[outer_iter] <- best_span
+  outer_results_both$selected_degree[outer_iter] <- best_degree
+  if(!any(is.na(final_pred))) {
+    outer_results_both$test_rmspe[outer_iter] <- sqrt(mean((test_data$y - final_pred)^2))
+  }
+  
+  cat("Iteration", outer_iter, "- Span:", best_span, "Degree:", best_degree, "\n")
+}
+
+cat("\n=== RESULTS (SPAN + DEGREE) ===\n")
+print(outer_results_both)
+cat("\nMean Test RMSPE:", round(mean(outer_results_both$test_rmspe, na.rm = TRUE), 2), "\n")
+cat("SD Test RMSPE:", round(sd(outer_results_both$test_rmspe, na.rm = TRUE), 2), "\n")
 
 ```
 
 #### **Question 12 (5 points):** What combination of span and degree gives the best results? Does tuning degree in addition to span improve prediction?
 
 **Your Answer:**
-
+The most common combination is span = 0.2 with degree = 2 (selected 5 times out of 10). Span = 0.2 with degree = 1 was also selected 3 times. Yes, tuning degree in addition to span does improve prediction - the mean test RMSPE improved from 16.13 (degree=1 only) to 14.53 (tuning both), a reduction of about 1.6 units in prediction error. The quadratic local fits (degree=2) appear to better capture the complex patterns in the data.
 #### **Question 13 (5 points):** Compare the mean RMSPE from tuning only span (degree=1) vs tuning both. Is the improvement meaningful?
 
 **Your Answer:**
+Comparison:
+- Tuning only span (degree=1): Mean RMSPE = 16.13, SD = 1.09
+- Tuning both span and degree: Mean RMSPE = 14.53, SD = 0.66
 
+The improvement is meaningful: prediction error decreased by 1.6 units (about 10% improvement). Additionally, the standard deviation also decreased from 1.09 to 0.66, indicating MORE STABLE predictions across different test sets. This suggests that allowing degree=2 helps the model better capture the true non-linear pattern, leading to both better and more consistent predictions.
 ---
 
 # Part D: Bootstrap Cross-Validation (25 points)
