@@ -703,20 +703,148 @@ Compare with your **tuned LOESS** results from Part C.
 # YOUR CODE HERE: Evaluate benchmark models using same 10 outer iterations
 # For each model, calculate mean and SD of test RMSPE
 
+# Benchmark Comparison using Nested CV
+set.seed(5560)
+n_outer <- 10
 
+# Storage for all models
+benchmark_results <- data.frame(
+  iteration = 1:n_outer,
+  linear = NA,
+  poly4 = NA,
+  loess_default = NA,
+  loess_tuned = NA
+)
+
+# Run 10 outer iterations
+for(outer_iter in 1:n_outer) {
+  
+  # Same outer split as before
+  test_idx <- sample(1:nrow(data), size = 0.2 * nrow(data))
+  modata <- data[-test_idx, ]
+  test_data <- data[test_idx, ]
+  
+  # ===== Model 1: Linear Regression =====
+  fit_linear <- lm(y ~ x, data = modata)
+  pred_linear <- predict(fit_linear, newdata = test_data)
+  if(!any(is.na(pred_linear))) {
+    benchmark_results$linear[outer_iter] <- sqrt(mean((test_data$y - pred_linear)^2))
+  }
+  
+  # ===== Model 2: Polynomial Regression (degree 4) =====
+  fit_poly <- lm(y ~ poly(x, 4), data = modata)
+  pred_poly <- predict(fit_poly, newdata = test_data)
+  if(!any(is.na(pred_poly))) {
+    benchmark_results$poly4[outer_iter] <- sqrt(mean((test_data$y - pred_poly)^2))
+  }
+  
+  # ===== Model 3: LOESS with default span (0.75, degree 1) =====
+  fit_default <- loess(y ~ x, data = modata, span = 0.75, degree = 1)
+  pred_default <- predict(fit_default, newdata = test_data)
+  if(!any(is.na(pred_default))) {
+    benchmark_results$loess_default[outer_iter] <- sqrt(mean((test_data$y - pred_default)^2))
+  }
+  
+  # ===== Model 4: LOESS Tuned (use best from Part C: span=0.2, degree=2) =====
+  fit_tuned <- loess(y ~ x, data = modata, span = 0.2, degree = 2)
+  pred_tuned <- predict(fit_tuned, newdata = test_data)
+  if(!any(is.na(pred_tuned))) {
+    benchmark_results$loess_tuned[outer_iter] <- sqrt(mean((test_data$y - pred_tuned)^2))
+  }
+  
+  cat("Iteration", outer_iter, "complete\n")
+}
+
+# Calculate summary statistics
+summary_table <- data.frame(
+  Model = c("Linear Regression", "Polynomial (degree 4)", 
+            "LOESS Default (span=0.75)", "LOESS Tuned (span=0.2, deg=2)"),
+  Mean_RMSPE = c(
+    mean(benchmark_results$linear, na.rm = TRUE),
+    mean(benchmark_results$poly4, na.rm = TRUE),
+    mean(benchmark_results$loess_default, na.rm = TRUE),
+    mean(benchmark_results$loess_tuned, na.rm = TRUE)
+  ),
+  SD_RMSPE = c(
+    sd(benchmark_results$linear, na.rm = TRUE),
+    sd(benchmark_results$poly4, na.rm = TRUE),
+    sd(benchmark_results$loess_default, na.rm = TRUE),
+    sd(benchmark_results$loess_tuned, na.rm = TRUE)
+  )
+)
+
+cat("\n=== BENCHMARK COMPARISON ===\n")
+# Calculate summary statistics
+summary_table <- data.frame(
+  Model = c("Linear Regression", "Polynomial (degree 4)", 
+            "LOESS Default (span=0.75)", "LOESS Tuned (span=0.2, deg=2)"),
+  Mean_RMSPE = round(c(
+    mean(benchmark_results$linear, na.rm = TRUE),
+    mean(benchmark_results$poly4, na.rm = TRUE),
+    mean(benchmark_results$loess_default, na.rm = TRUE),
+    mean(benchmark_results$loess_tuned, na.rm = TRUE)
+  ), 2),
+  SD_RMSPE = round(c(
+    sd(benchmark_results$linear, na.rm = TRUE),
+    sd(benchmark_results$poly4, na.rm = TRUE),
+    sd(benchmark_results$loess_default, na.rm = TRUE),
+    sd(benchmark_results$loess_tuned, na.rm = TRUE)
+  ), 2)
+)
+
+cat("\n=== BENCHMARK COMPARISON ===\n")
+print(summary_table)
+
+# Improvement calculation
+default_error <- mean(benchmark_results$loess_default, na.rm = TRUE)
+tuned_error <- mean(benchmark_results$loess_tuned, na.rm = TRUE)
+improvement <- default_error - tuned_error
+improvement_pct <- (improvement / default_error) * 100
+
+cat("\nImprovement from tuning:", round(improvement, 2), 
+    "units (", round(improvement_pct, 1), "% reduction)\n")
 ```
 
 #### **Question 19 (5 points):** Create a summary table comparing all methods with columns: Model, Mean RMSPE, SD RMSPE
 
 **Your Answer:**
+Summary of all models tested:
+
+| Model | Mean RMSPE | SD RMSPE |
+|-------|------------|----------|
+| Linear Regression | 28.47 | 1.78 |
+| Polynomial (degree 4) | 18.22 | 0.87 |
+| LOESS Default (span=0.75) | 26.01 | 1.60 |
+| LOESS Tuned (span=0.2, deg=2) | 15.57 | 0.57 |
+
+The tuned LOESS model clearly outperforms all other approaches with the lowest mean error and standard deviation.
 
 #### **Question 20 (5 points):** How much did hyperparameter tuning improve RMSPE compared to using the default span (0.75)?
 
 **Your Answer:**
+Hyperparameter tuning achieved a massive improvement:
+- LOESS Default (span=0.75): Mean RMSPE = 26.01
+- LOESS Tuned (span=0.2, deg=2): Mean RMSPE = 15.57
+- Improvement: 10.44 units (40.1% reduction in error!)
+
+Tuning also improved stability (SD reduced from 1.60 to 0.57). This demonstrates that the default hyperparameters are far from optimal for this data, and proper tuning is essential for good performance.
 
 #### **Question 21 (5 points):** Based on your benchmark comparison, which model would you recommend for this data? Consider both accuracy (mean RMSPE) and reliability (SD). Is the improvement from tuning worth the computational cost?
 
 **Your Answer:**
+I recommend the LOESS Tuned (span=0.2, degree=2) model for the following reasons:
+
+1. **Best accuracy:** Lowest mean RMSPE (15.57) - beats all competitors
+2. **Most reliable:** Lowest SD (0.57) - most consistent predictions
+3. **Substantial improvement:** 40% error reduction vs default LOESS, 14% better than polynomial
+
+Is tuning worth the cost?
+- YES! The improvement is dramatic (40% better than default)
+- The polynomial model (18.22 RMSPE) requires no tuning but is 17% worse
+- For production use, spending extra time tuning pays off with significantly better predictions
+- The computational cost is a one-time investment that yields ongoing benefits
+
+For this complex, non-linear data with periodic patterns, the tuned LOESS model is clearly the best choice.
 
 ---
 
