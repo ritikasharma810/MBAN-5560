@@ -557,29 +557,135 @@ select hyperparameter with lowest average RMSPE
 
 ```{r bootstrap-cv}
 # YOUR CODE HERE: Implement bootstrap CV
+# Bootstrap Cross-Validation
+set.seed(5560)
+n_outer_boot <- 8  # 8 outer iterations
+B <- 25  # 25 bootstrap iterations per hyperparameter
+
+# Storage for results
+outer_results_boot <- data.frame(
+  iteration = 1:n_outer_boot,
+  selected_span = NA,
+  selected_degree = NA,
+  test_rmspe = NA
+)
+
+# Outer loop: 8 iterations
+for(outer_iter in 1:n_outer_boot) {
+  
+  # Outer split (80/20)
+  test_idx <- sample(1:nrow(data), size = 0.2 * nrow(data))
+  modata <- data[-test_idx, ]
+  test_data <- data[test_idx, ]
+  
+  # For each hyperparameter combo, calculate average bootstrap RMSPE
+  grid_rmspe_boot <- rep(NA, nrow(grid_both))
+  
+  # OUTER: Try each hyperparameter combination
+  for(g in 1:nrow(grid_both)) {
+    
+    boot_rmspe <- rep(NA, B)
+    
+    # INNER: Bootstrap iterations for this hyperparameter
+    for(b in 1:B) {
+      
+      # Bootstrap sample (sample WITH replacement)
+      boot_idx <- sample(1:nrow(modata), size = nrow(modata), replace = TRUE)
+      train_boot <- modata[boot_idx, ]
+      
+      # Out-of-bag (OOB) observations = validation set
+      oob_idx <- setdiff(1:nrow(modata), unique(boot_idx))
+      
+      if(length(oob_idx) > 0) {
+        val_boot <- modata[oob_idx, ]
+        
+        # Fit model on bootstrap sample
+        fit_boot <- loess(y ~ x, data = train_boot,
+                          span = grid_both$span[g],
+                          degree = grid_both$degree[g])
+        
+        # Predict on OOB
+        pred_boot <- predict(fit_boot, newdata = val_boot)
+        
+        # Calculate RMSPE
+        if(!any(is.na(pred_boot))) {
+          boot_rmspe[b] <- sqrt(mean((val_boot$y - pred_boot)^2))
+        }
+      }
+    }
+    
+    # Average RMSPE across all B bootstrap iterations
+    grid_rmspe_boot[g] <- mean(boot_rmspe, na.rm = TRUE)
+  }
+  
+  # Select best hyperparameter combination
+  best_idx <- which.min(grid_rmspe_boot)
+  best_span <- grid_both$span[best_idx]
+  best_degree <- grid_both$degree[best_idx]
+  
+  # Test on held-out test set
+  final_fit <- loess(y ~ x, data = modata, span = best_span, degree = best_degree)
+  final_pred <- predict(final_fit, newdata = test_data)
+  
+  # Store results
+  outer_results_boot$selected_span[outer_iter] <- best_span
+  outer_results_boot$selected_degree[outer_iter] <- best_degree
+  if(!any(is.na(final_pred))) {
+    outer_results_boot$test_rmspe[outer_iter] <- sqrt(mean((test_data$y - final_pred)^2))
+  }
+  
+  cat("Iteration", outer_iter, "- Span:", best_span, "Degree:", best_degree, "\n")
+}
+
+cat("\n=== BOOTSTRAP CV RESULTS ===\n")
+print(outer_results_boot)
+cat("\nMean Test RMSPE:", round(mean(outer_results_boot$test_rmspe, na.rm = TRUE), 2), "\n")
+cat("SD Test RMSPE:", round(sd(outer_results_boot$test_rmspe, na.rm = TRUE), 2), "\n")
 
 ```
 
 #### **Question 14 (5 points):** Report the mean and SD of test RMSPE from bootstrap CV.
 
 **Your Answer:**
+Mean Test RMSPE: 14.99
+SD Test RMSPE: 0.08
+
+The bootstrap CV gives very similar mean error to k-fold CV (14.99 vs 14.53) but with much lower standard deviation (0.08 vs 0.66), indicating extremely stable results.
 
 #### **Question 15 (5 points):** Compare the bootstrap CV results to the k-fold CV results from Part C. Which method gave more stable results (lower SD)?
 
 **Your Answer:**
+Bootstrap CV gave MORE STABLE results:
+- K-fold CV: Mean = 14.53, SD = 0.66
+- Bootstrap CV: Mean = 14.99, SD = 0.08
+
+Bootstrap CV has dramatically lower standard deviation (0.08 vs 0.66), meaning the test error is much more consistent across different iterations. The mean errors are similar (both around 14-15), but bootstrap provides far less variability in the results.
 
 #### **Question 16 (5 points):** The OOB validation set is approximately what percentage of the data? How does this compare to 10-fold CV where each validation fold is 10% of the data?
 
 **Your Answer:**
+In bootstrap sampling, approximately 36.8% of observations are Out-of-Bag (OOB) and not selected in the bootstrap sample. This is because when sampling with replacement, the probability of NOT being selected is (1-1/n)^n ≈ 1/e ≈ 0.368 as n gets large.
 
+In 10-fold CV, each validation fold is exactly 10% of the data. So bootstrap uses a LARGER validation set (37% vs 10%), which may contribute to more stable error estimates since we're validating on more data each time.
 #### **Question 17 (5 points):** Based on your results, which method would you recommend for hyperparameter tuning: k-fold CV or bootstrap CV? Justify your choice.
 
 **Your Answer:**
+I would recommend BOOTSTRAP CV for the following reasons:
+
+1. **Much more stable:** SD of 0.08 vs 0.66 means we can trust the results more
+2. **Larger validation sets:** Using ~37% OOB data vs 10% per fold gives more reliable error estimates
+3. **Consistent selections:** Bootstrap consistently chose span=0.2, degree=2 (7 out of 8 times)
+
+However, k-fold CV is computationally simpler and still reliable. For critical applications where stability matters most, bootstrap is better. For quick experimentation, k-fold CV is sufficient.
 
 #### **Question 18 (5 points):** Did bootstrap CV select different hyperparameters than k-fold CV? Explain any differences.
 
 **Your Answer:**
+Bootstrap CV and k-fold CV selected very similar hyperparameters:
+- K-fold CV: Most common was span=0.2, degree=2
+- Bootstrap CV: span=0.2, degree=2 selected 7 out of 8 times
 
+The methods agree on the optimal hyperparameters! Both consistently prefer span=0.2 with degree=2, giving us high confidence that this is truly the best combination. The slight difference is that bootstrap was MORE CONSISTENT in its selection, showing less variation across iterations.
 ---
 
 # Part E: Benchmark Comparison (15 points)
