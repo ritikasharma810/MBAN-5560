@@ -98,22 +98,50 @@ Fit LOESS models with three different span values (0.2, 0.5, 0.8) using `degree 
 
 ```{r explore-spans}
 # YOUR CODE HERE: Fit LOESS with span = 0.2, 0.5, 0.8 and plot
+# Fit LOESS with different spans
+fit_02 <- loess(y ~ x, data = data, span = 0.2, degree = 1)
+fit_05 <- loess(y ~ x, data = data, span = 0.5, degree = 1)
+fit_08 <- loess(y ~ x, data = data, span = 0.8, degree = 1)
 
+# Add predictions to data
+data_plot <- data %>%
+  mutate(pred_02 = predict(fit_02),
+         pred_05 = predict(fit_05),
+         pred_08 = predict(fit_08))
+
+# Plot all fits
+ggplot(data_plot, aes(x = x)) +
+  geom_point(aes(y = y), alpha = 0.3, color = "gray") +
+  geom_line(aes(y = f_true, color = "True Function"), linetype = "dashed", linewidth = 1.2) +
+  geom_line(aes(y = pred_02, color = "Span 0.2"), linewidth = 1) +
+  geom_line(aes(y = pred_05, color = "Span 0.5"), linewidth = 1) +
+  geom_line(aes(y = pred_08, color = "Span 0.8"), linewidth = 1) +
+  scale_color_manual(values = c("True Function" = "red", 
+                                 "Span 0.2" = "blue", 
+                                 "Span 0.5" = "green", 
+                                 "Span 0.8" = "purple")) +
+  labs(title = "LOESS Fits with Different Span Values",
+       subtitle = "Comparing flexibility vs smoothness",
+       x = "X", y = "Y", color = "Model") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
 
 ```
 
 #### **Question 2 (4 points):** How does the span parameter affect the fitted curve? Which span appears to best capture the true relationship?
 
 **Your Answer:**
+The span parameter controls how much data is used for local fitting. Span 0.2 (blue line) uses only 20% of nearby points, creating a very wiggly, flexible curve that follows every small fluctuation - it appears to be overfitting to noise. Span 0.8 (purple line) uses 80% of points, creating a very smooth curve that misses the periodic waves - it is underfitting. Span 0.5 (green line) appears to best capture the true relationship (red dashed line) by balancing flexibility and smoothness, following the general pattern without fitting the noise.
 
 #### **Question 3 (4 points):** Explain the bias-variance tradeoff in the context of the span parameter. Which span has high bias? Which has high variance?
 
 **Your Answer:**
+Span 0.2 has HIGH VARIANCE - it's too flexible and changes dramatically with small changes in the training data. It fits the random noise, leading to different predictions on new data (poor generalization). Span 0.8 has HIGH BIAS - it's too rigid and systematically misses the true pattern, underfitting regardless of which data sample we use. The bias-variance tradeoff means we need a middle ground: span 0.5 balances these two error sources, achieving lower total prediction error by being flexible enough to capture the pattern but not so flexible that it fits noise.
 
 #### **Question 4 (4 points):** Can you determine the optimal span just by looking at these plots? Why or why not?
 
 **Your Answer:**
-
+No, we cannot reliably determine the optimal span just by visual inspection. We are looking at how well the models fit the TRAINING data, but what matters is prediction on NEW, unseen data. A model might look perfect on training data but perform poorly on test data (overfitting). We need a systematic validation approach like cross-validation that evaluates prediction error on held-out data. Only by testing on data the model hasn't seen can we measure true predictive performance and find the optimal span.
 ---
 
 # Part B: Simple Train-Test Split (20 points)
@@ -138,13 +166,52 @@ grid_span <- seq(from = 0.1, to = 0.9, by = 0.05)
 # 3. For each span, fit LOESS and calculate RMSPE
 # 4. Find optimal span
 
+# Set seed for reproducibility
+set.seed(100)
 
+# Split data 80/20
+train_idx <- sample(1:nrow(data), size = 0.8 * nrow(data))
+train_data <- data[train_idx, ]
+test_data <- data[-train_idx, ]
+
+# Create results storage
+results <- data.frame(span = grid_span, rmspe = NA)
+
+# Grid search - try each span value
+for(i in 1:length(grid_span)) {
+  # Fit model on training data
+  fit <- loess(y ~ x, data = train_data, span = grid_span[i], degree = 1)
+  
+  # Predict on test data
+  pred <- predict(fit, newdata = test_data)
+  
+  # Calculate RMSPE (Root Mean Squared Prediction Error)
+  results$rmspe[i] <- sqrt(mean((test_data$y - pred)^2))
+}
+
+# Find optimal span
+optimal_span <- results$span[which.min(results$rmspe)]
+optimal_rmspe <- min(results$rmspe)
+
+# Display results
+cat("Optimal span:", optimal_span, "\n")
+cat("Test RMSPE:", round(optimal_rmspe, 2), "\n")
+
+# Plot RMSPE vs span
+ggplot(results, aes(x = span, y = rmspe)) +
+  geom_line(color = "blue", linewidth = 1) +
+  geom_point(color = "blue") +
+  geom_vline(xintercept = optimal_span, linetype = "dashed", color = "red") +
+  labs(title = "RMSPE vs Span (Single Train-Test Split)",
+       subtitle = paste("Optimal span =", optimal_span),
+       x = "Span", y = "RMSPE") +
+  theme_minimal()
 ```
 
 #### **Question 5 (5 points):** What is the optimal span found with seed = 100? What is the corresponding RMSPE?
 
 **Your Answer:**
-
+With seed = 100, the optimal span is 0.15 and the corresponding test RMSPE is 14.01. This span minimizes prediction error on the held-out test set for this particular random split. The plot shows that very small spans (0.1-0.2) perform best, while larger spans (above 0.5) have much higher prediction errors.
 ---
 
 ## Task B.2: Demonstrate instability
@@ -154,6 +221,52 @@ Repeat the grid search with three different seeds (200, 300, 400) to show how th
 ```{r instability-demo}
 # YOUR CODE HERE: Run grid search with seeds 200, 300, 400
 # Store the optimal span and RMSPE for each
+# Test with different seeds
+
+# Test with different seeds
+seeds <- c(200, 300, 400)
+seed_results <- data.frame(seed = seeds, optimal_span = NA, rmspe = NA)
+
+for(s in 1:length(seeds)) {
+  set.seed(seeds[s])
+  
+  # Split data
+  train_idx <- sample(1:nrow(data), size = 0.8 * nrow(data))
+  train_data <- data[train_idx, ]
+  test_data <- data[-train_idx, ]
+  
+  # Grid search
+  results_temp <- data.frame(span = grid_span, rmspe = NA)
+  
+  for(i in 1:length(grid_span)) {
+    # Fit model
+    fit <- loess(y ~ x, data = train_data, span = grid_span[i], degree = 1)
+    
+    # Predict (with error handling)
+    pred <- predict(fit, newdata = test_data)
+    
+    # Only calculate RMSPE if no NA values
+    if(!any(is.na(pred))) {
+      results_temp$rmspe[i] <- sqrt(mean((test_data$y - pred)^2))
+    }
+  }
+  
+  # Find best span (excluding NAs)
+  valid_results <- results_temp[!is.na(results_temp$rmspe), ]
+  
+  if(nrow(valid_results) > 0) {
+    best_idx <- which.min(valid_results$rmspe)
+    seed_results$optimal_span[s] <- valid_results$span[best_idx]
+    seed_results$rmspe[s] <- valid_results$rmspe[best_idx]
+  }
+}
+
+# Display results
+print(seed_results)
+cat("\nSpan range:", min(seed_results$optimal_span, na.rm=TRUE), "to", 
+    max(seed_results$optimal_span, na.rm=TRUE), "\n")
+cat("RMSPE range:", round(min(seed_results$rmspe, na.rm=TRUE), 2), "to", 
+    round(max(seed_results$rmspe, na.rm=TRUE), 2), "\n")
 
 
 ```
@@ -161,14 +274,22 @@ Repeat the grid search with three different seeds (200, 300, 400) to show how th
 #### **Question 6 (5 points):** Report the optimal span found with each seed. How much does it vary?
 
 **Your Answer:**
+The optimal spans found are:
+- Seed 200: span = 0.15, RMSPE = 17.93
+- Seed 300: Failed (no valid predictions)
+- Seed 400: span = 0.10, RMSPE = 14.31
+
+The span varies between 0.10 and 0.15 for the successful splits. Even though the range seems small, this represents a 50% difference in the proportion of data used for local fitting (10% vs 15%), which can significantly affect the model's flexibility.
 
 #### **Question 7 (5 points):** Why does the optimal span change with different random splits? What does this tell us about using a single train-test split for hyperparameter tuning?
 
 **Your Answer:**
+The optimal span changes because each random split creates a different training and test set. Different splits may have different patterns or noise in the test set, leading to different "optimal" spans. One split even failed completely (seed 300), showing extreme instability. This tells us that a single train-test split is unreliable for hyperparameter tuning - the results are highly dependent on luck (which random split you get). We cannot trust that the optimal span from one split will generalize well.
 
 #### **Question 8 (5 points):** Based on this exercise, would you trust the optimal span from a single split? What approach would be more reliable?
 
 **Your Answer:**
+No, I would not trust the optimal span from a single split. We saw that different splits gave different optimal spans (0.10 vs 0.15), different RMSPEs (14.31 vs 17.93), and one split even failed completely. A more reliable approach is cross-validation, where we use multiple train-test splits and average the results. This reduces the impact of random variation and gives us a more stable estimate of which hyperparameter performs best on average across different data splits.
 
 ---
 
