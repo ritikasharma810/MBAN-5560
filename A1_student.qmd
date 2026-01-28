@@ -74,6 +74,13 @@ Create a scatter plot of the data with the true function overlaid as a red dashe
 
 ```{r plot-data}
 # YOUR CODE HERE: Create scatter plot with true function
+ggplot(data, aes(x = x, y = y)) +
+  geom_point(alpha = 0.5, color = "blue") +
+  geom_line(aes(y = f_true), color = "red", linetype = "dashed", linewidth = 1) +
+  labs(title = "Simulated Data with True Function",
+       subtitle = "Red dashed line shows the true underlying relationship",
+       x = "X", y = "Y") +
+  theme_minimal()
 
 
 ```
@@ -81,6 +88,7 @@ Create a scatter plot of the data with the true function overlaid as a red dashe
 #### **Question 1 (3 points):** Describe the pattern you see in the data. What makes this relationship challenging for a simple linear model?
 
 **Your Answer:**
+The data shows a complex non-linear pattern that combines a quadratic trend (upward curve) with periodic oscillations (waves). The relationship is not a straight line - it curves upward and also oscillates up and down in a wave-like pattern. A simple linear model would fail because it can only fit a straight line, which cannot capture either the curvature or the periodic waves. The model would have large prediction errors across the entire range of X values.
 
 ---
 
