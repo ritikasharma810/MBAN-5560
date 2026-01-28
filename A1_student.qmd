@@ -1,7 +1,7 @@
 ---
 title: "Assignment 1 - Basics of Hyperparameter Tuning: Finding the Optimal Span & Degree for LOESS"
 subtitle: "MBAN 5560 - Due January 31, 2026 (Saturday) 11:59pm"
-author: "Dr. Aydede"
+author: "Ritika Sharma"
 date: today
 format: 
   html:
@@ -859,5 +859,25 @@ For this complex, non-linear data with periodic patterns, the tuned LOESS model 
 - [ ] Document renders to HTML successfully
 
 ---
+---
 
+# LLM Usage Disclosure
+
+**Tool Used:** Claude (Anthropic AI Assistant)
+
+**How I used it:**
+- I completed the assignment independently and understand all the concepts
+- I used Claude to help with R coding syntax and debugging errors
+- Claude provided code examples which I adapted and modified for my analysis
+- I used AI to help clarify technical concepts when I got stuck
+- All interpretations, answers, and conclusions are my own work based on my results
+
+**My work:**
+- Understood and completed all analysis independently
+- Ran all code and verified outputs myself
+- Analyzed all results and wrote my own interpretations
+- Made all final decisions about what the results mean
+- Reviewed and understood everything before submission
+
+I used AI as a coding assistant and learning tool, but all the analysis, thinking, and decision-making is my own work.
 **Good luck with your analysis!**
